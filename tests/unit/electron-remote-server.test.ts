@@ -26,6 +26,7 @@ const {
   readPreferences,
   writeRemoteServerUrl,
   writeCloseBehavior,
+  writeNotificationsEnabled,
 } = require("../../electron/lib/remoteServerPreferences");
 
 function withTempDir(fn: (dir: string) => void) {
@@ -130,6 +131,7 @@ describe("remoteServerPreferences read/write", () => {
       assert.deepEqual(readPreferences(prefsPath), {
         remoteServerUrl: "http://localhost:20128",
         closeBehavior: "keep-loaded",
+        notificationsEnabled: true,
       });
     });
   });
@@ -142,6 +144,7 @@ describe("remoteServerPreferences read/write", () => {
       assert.deepEqual(readPreferences(prefsPath), {
         remoteServerUrl: null,
         closeBehavior: "keep-loaded",
+        notificationsEnabled: true,
       });
     });
   });
@@ -154,6 +157,7 @@ describe("remoteServerPreferences read/write", () => {
       assert.deepEqual(readPreferences(prefsPath), {
         remoteServerUrl: "http://localhost:20128",
         closeBehavior: "keep-loaded",
+        notificationsEnabled: true,
       });
     });
   });
@@ -164,6 +168,7 @@ describe("remoteServerPreferences read/write", () => {
       assert.deepEqual(readPreferences(prefsPath), {
         remoteServerUrl: null,
         closeBehavior: "keep-loaded",
+        notificationsEnabled: true,
       });
     });
   });
@@ -176,7 +181,30 @@ describe("remoteServerPreferences read/write", () => {
       assert.deepEqual(readPreferences(prefsPath), {
         remoteServerUrl: "https://omniroute.example.com",
         closeBehavior: "unload",
+        notificationsEnabled: true,
       });
+    });
+  });
+
+  it("persists the notifications toggle without discarding the remote server URL", () => {
+    withTempDir((dir) => {
+      const prefsPath = join(dir, "electron-preferences.json");
+      writeRemoteServerUrl(prefsPath, "https://omniroute.example.com");
+      writeNotificationsEnabled(prefsPath, false);
+      assert.deepEqual(readPreferences(prefsPath), {
+        remoteServerUrl: "https://omniroute.example.com",
+        closeBehavior: "keep-loaded",
+        notificationsEnabled: false,
+      });
+    });
+  });
+
+  it("coerces a non-false value back to enabled", () => {
+    withTempDir((dir) => {
+      const prefsPath = join(dir, "electron-preferences.json");
+      writeNotificationsEnabled(prefsPath, false);
+      writeNotificationsEnabled(prefsPath, true);
+      assert.equal(readPreferences(prefsPath).notificationsEnabled, true);
     });
   });
 });

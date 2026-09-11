@@ -168,7 +168,25 @@ Persisted to `<DATA_DIR>/server.env`. `DATA_DIR` resolves to:
 - `BrowserWindow`: 1400×900 (min 1024×700), `backgroundColor: "#0a0a0a"`.
 - macOS: `titleBarStyle: "hiddenInset"`, traffic-light at `{ x: 16, y: 16 }`.
 - Windows/Linux: native title bar.
-- Close button minimizes to tray; the tray menu has **Open OmniRoute**, **Open Dashboard** (external browser), **Server Port** submenu, **Check for Updates**, **Quit**.
+- Close button minimizes to tray; the tray menu has **Open OmniRoute**, **Open Dashboard** (external browser), **Server Port** submenu, **Desktop Notifications** checkbox, **Check for Updates**, **Quit**.
+
+## Desktop Notifications
+
+`electron/lib/desktopNotifications.js` wraps Electron's `Notification` API (native
+Notification Center on macOS, libnotify on Linux, toast on Windows) behind a single
+`notify()` helper that no-ops when the OS doesn't support notifications or the user has
+turned them off — callers never need their own checks. `main.js` binds it once as
+`notifyDesktop()` and fires it for:
+
+- **Update downloaded** — click to `autoUpdater.quitAndInstall()`.
+- **Server failed to start** (`nextServer.on("error")`).
+- **Server exited unexpectedly** — nonzero exit code while the app itself isn't the one
+  stopping the server (`!isServerStopped`, set only during the deliberate `before-quit`
+  shutdown).
+
+The **Desktop Notifications** tray checkbox toggles `notificationsEnabled` and persists
+it via `writeNotificationsEnabled()` into the same `electron-preferences.json` file used
+for the remote-server URL and close behavior (default: enabled).
 
 ## Content Security Policy
 
