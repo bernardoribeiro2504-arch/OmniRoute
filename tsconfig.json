@@ -55,6 +55,7 @@
     ".tmp",
     ".claude",
     ".worktrees",
+    ".wanman",
     "@omniroute",
     "_tasks",
     "_ideia",

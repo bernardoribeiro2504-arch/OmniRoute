@@ -203,6 +203,7 @@ scripts/i18n/_pending-keys.json
 .claude/commands/port-upstream-features-cc.md
 .claude/commands/port-upstream-issues-cc.md
 .claude/worktrees/
+.wanman/
 .codegraph/
 
 # Test executable shims belong in the OS temporary directory, not the repository root
