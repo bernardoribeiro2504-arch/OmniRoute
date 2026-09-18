@@ -147,6 +147,7 @@ app.__qa_backup/
 .app-build-backup-*/
 .gitnexus
 .worktrees
+.wanman
 .next-playwright/
 cloud/
 electron/dist-electron
