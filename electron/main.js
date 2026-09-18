@@ -42,7 +42,9 @@ const {
   readPreferences,
   writeRemoteServerUrl,
   writeCloseBehavior,
+  writeNotificationsEnabled,
 } = require("./lib/remoteServerPreferences");
+const { normalizeNotificationsEnabled, notify } = require("./lib/desktopNotifications");
 const { buildReadinessUrl, waitForServer } = require("./lib/serverReadiness");
 const { shouldStartHidden, showOrCreateWindow } = require("./lib/windowLifecycle");
 const {
@@ -97,6 +99,7 @@ const REMOTE_SERVER_PREFS_PATH = path.join(
 );
 const electronPreferences = readPreferences(REMOTE_SERVER_PREFS_PATH);
 let closeBehavior = electronPreferences.closeBehavior;
+let notificationsEnabled = normalizeNotificationsEnabled(electronPreferences.notificationsEnabled);
 let remoteServerUrl = resolveRemoteServerUrl({
   env: process.env,
   prefsPath: REMOTE_SERVER_PREFS_PATH,
@@ -234,6 +237,29 @@ function sendToRenderer(channel, data) {
   }
 }
 
+// ── Helper: Desktop notifications ──────────────────────────
+// Thin binding of the injectable notify() helper to the real Electron Notification
+// API — kept here rather than at each call site so `notificationsEnabled` is always
+// read live (a tray toggle takes effect on the very next notification).
+function notifyDesktop({ title, body, onClick }) {
+  return notify({
+    enabled: notificationsEnabled,
+    isSupported: Notification.isSupported,
+    createNotification: (options) => new Notification(options),
+    title,
+    body,
+    onClick,
+  });
+}
+
+function setNotificationsEnabled(nextEnabled) {
+  const normalized = normalizeNotificationsEnabled(nextEnabled);
+  if (normalized === notificationsEnabled) return;
+  notificationsEnabled = normalized;
+  writeNotificationsEnabled(REMOTE_SERVER_PREFS_PATH, notificationsEnabled);
+  createTray();
+}
+
 // ── Helper: Wait for server process exit with timeout (#2) ─
 async function waitForServerExit(proc, timeoutMs = 5000) {
   if (!proc) return;
@@ -284,16 +310,11 @@ function setupAutoUpdater() {
     sendToRenderer("update-status", { status: "downloaded", version: info.version });
     console.log("[Electron] Update downloaded:", info.version);
 
-    if (Notification.isSupported()) {
-      const notification = new Notification({
-        title: "OmniRoute Update Ready",
-        body: `Version ${info.version} is ready to install. Click to restart.`,
-      });
-      notification.on("click", () => {
-        autoUpdater.quitAndInstall();
-      });
-      notification.show();
-    }
+    notifyDesktop({
+      title: "OmniRoute Update Ready",
+      body: `Version ${info.version} is ready to install. Click to restart.`,
+      onClick: () => autoUpdater.quitAndInstall(),
+    });
   });
 
   autoUpdater.on("error", (error) => {
@@ -561,6 +582,12 @@ function createTray() {
           click: () => setCloseBehavior(CLOSE_BEHAVIOR_UNLOAD),
         },
       ],
+    },
+    {
+      label: "Desktop Notifications",
+      type: "checkbox",
+      checked: notificationsEnabled,
+      click: (menuItem) => setNotificationsEnabled(menuItem.checked),
     },
     { type: "separator" },
     {
@@ -883,11 +910,25 @@ function startNextServer() {
   nextServer.on("error", (err) => {
     console.error("[Electron] Failed to start server:", err);
     sendToRenderer("server-status", { status: "error", port: serverPort });
+    notifyDesktop({
+      title: "OmniRoute Server Failed to Start",
+      body: err instanceof Error ? err.message : String(err),
+    });
   });
 
   nextServer.on("exit", (code) => {
     console.log("[Electron] Server exited with code:", code);
     sendToRenderer("server-status", { status: "stopped", port: serverPort });
+    // A nonzero exit while the app is not quitting/restarting the server itself
+    // (isServerStopped only flips true during the deliberate before-quit shutdown)
+    // means the server died on its own — the one case worth surfacing natively,
+    // since the tray/renderer may not be visible when it happens.
+    if (code !== 0 && !isServerStopped) {
+      notifyDesktop({
+        title: "OmniRoute Server Stopped Unexpectedly",
+        body: `The embedded server exited with code ${code}. Open OmniRoute to restart it.`,
+      });
+    }
     nextServer = null;
   });
 }

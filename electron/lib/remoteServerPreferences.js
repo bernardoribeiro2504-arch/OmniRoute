@@ -18,10 +18,15 @@ const path = require("path");
  * @param {string} prefsPath - absolute path to electron-preferences.json
  * @param {(p: string) => boolean} [existsSync]
  * @param {(p: string, enc: string) => string} [readFileSync]
- * @returns {{remoteServerUrl: string|null, closeBehavior: "keep-loaded"|"unload"}}
+ * @returns {{remoteServerUrl: string|null, closeBehavior: "keep-loaded"|"unload", notificationsEnabled: boolean}}
  */
 function readPreferences(prefsPath, existsSync = fs.existsSync, readFileSync = fs.readFileSync) {
-  if (!existsSync(prefsPath)) return { remoteServerUrl: null, closeBehavior: "keep-loaded" };
+  const defaults = {
+    remoteServerUrl: null,
+    closeBehavior: "keep-loaded",
+    notificationsEnabled: true,
+  };
+  if (!existsSync(prefsPath)) return defaults;
   try {
     const parsed = JSON.parse(readFileSync(prefsPath, "utf8"));
     const remoteServerUrl =
@@ -29,9 +34,10 @@ function readPreferences(prefsPath, existsSync = fs.existsSync, readFileSync = f
         ? parsed.remoteServerUrl.trim()
         : null;
     const closeBehavior = parsed.closeBehavior === "unload" ? "unload" : "keep-loaded";
-    return { remoteServerUrl, closeBehavior };
+    const notificationsEnabled = parsed.notificationsEnabled !== false;
+    return { remoteServerUrl, closeBehavior, notificationsEnabled };
   } catch {
-    return { remoteServerUrl: null, closeBehavior: "keep-loaded" };
+    return defaults;
   }
 }
 
@@ -104,4 +110,37 @@ function writeCloseBehavior(
   }
 }
 
-module.exports = { readPreferences, writeRemoteServerUrl, writeCloseBehavior };
+/** Persist whether desktop notifications (updates, server errors) are shown. */
+function writeNotificationsEnabled(
+  prefsPath,
+  notificationsEnabled,
+  {
+    existsSync = fs.existsSync,
+    readFileSync = fs.readFileSync,
+    writeFileSync = fs.writeFileSync,
+    mkdirSync = fs.mkdirSync,
+  } = {}
+) {
+  try {
+    const dir = path.dirname(prefsPath);
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
+    }
+
+    const current = readPreferences(prefsPath, existsSync, readFileSync);
+    const next = { ...current, notificationsEnabled: notificationsEnabled !== false };
+    writeFileSync(prefsPath, JSON.stringify(next, null, 2) + "\n", "utf8");
+  } catch (err) {
+    console.error(
+      `[remoteServerPreferences] Failed to write preferences to ${prefsPath}:`,
+      err instanceof Error ? err.message : String(err)
+    );
+  }
+}
+
+module.exports = {
+  readPreferences,
+  writeRemoteServerUrl,
+  writeCloseBehavior,
+  writeNotificationsEnabled,
+};
